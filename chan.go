@@ -1,3 +1,7 @@
+// Copyright 2018 Joshua J Baker. All rights reserved.
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
+
 package fastlane
 
 import (
@@ -74,7 +78,7 @@ func (ch *Chan) free(recvd *node) {
 	}
 }
 
-// Send sends a messages to the receiver.
+// Send sends a message to the receiver.
 func (ch *Chan) Send(value interface{}) {
 	n := ch.new()
 	n.valu = value
