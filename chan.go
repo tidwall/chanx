@@ -136,10 +136,7 @@ func (ch *Chan) Recv() interface{} {
 		runtime.Gosched()
 	}
 	// set the prev pointers for tracking backwards
-	for {
-		if n.next == nil {
-			break
-		}
+	for n.next != nil {
 		n.next.prev = n
 		n = n.next
 	}
