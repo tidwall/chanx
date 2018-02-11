@@ -11,7 +11,8 @@ import (
 func main() {
 	head, body1 := makeType("Uint64", "uint64")
 	_, body2 := makeType("Pointer", "unsafe.Pointer")
-	contents := head + "\n" + body1 + "\n" + body2
+	contents := "// CODE GENERATED; DO NOT EDIT\n\n" +
+		head + "\n" + body1 + "\n" + body2
 	fi, err := os.Stat("chan.go")
 	must(err)
 	must(ioutil.WriteFile("chan_types.go", []byte(contents), fi.Mode()))
