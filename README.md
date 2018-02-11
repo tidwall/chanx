@@ -60,7 +60,7 @@ Here's a simple wrapper for creating a channel for sending a custom types as a p
 
 ```go
 type MyType struct {
-	Hiya int
+	Hiya string
 }
 
 type ChanMyType struct{ base fastlane.ChanPointer }
@@ -73,6 +73,14 @@ func (ch *ChanMyType) Recv() *MyType {
 }
 ```
 
+```go
+var ch ChanMyType
+
+go func() { ch.Send(&MyType{Hiya: "howdy!"}) }()
+
+v := ch.Recv()
+println(v.Hiya)
+```
 
 ## Performance
 
