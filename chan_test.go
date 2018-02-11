@@ -91,17 +91,21 @@ func benchmarkGoChan(N, buffered int, validate bool) {
 }
 
 func BenchmarkFastlaneChan(b *testing.B) {
+	b.ReportAllocs()
 	benchmarkFastlaneChan(b.N, false)
 }
 
 func BenchmarkGoChan100(b *testing.B) {
+	b.ReportAllocs()
 	benchmarkGoChan(b.N, 100, false)
 }
 
 func BenchmarkGoChan10(b *testing.B) {
+	b.ReportAllocs()
 	benchmarkGoChan(b.N, 10, false)
 }
 
 func BenchmarkGoChanUnbuffered(b *testing.B) {
+	b.ReportAllocs()
 	benchmarkGoChan(b.N, 0, false)
 }

@@ -28,6 +28,7 @@ type ChanUint64 struct {
 	waitg sync.WaitGroup // used for sleeping. gotta get our zzz's
 	queue *nodeUint64    // sender queue, sender -> receiver
 	recvd *nodeUint64    // receive queue, receiver-only
+	rtail *nodeUint64    // tail of receive queue, receiver-only
 	freed *nodeUint64    // freed queue, receiver -> sender
 	avail *nodeUint64    // avail items, sender-only
 }
@@ -71,6 +72,7 @@ func (ch *ChanUint64) free(recvd *nodeUint64) {
 		freed := (*nodeUint64)(atomic.LoadPointer(
 			(*unsafe.Pointer)(unsafe.Pointer(&ch.freed)),
 		))
+		ch.rtail.next = freed
 		if atomic.CompareAndSwapPointer(
 			(*unsafe.Pointer)(unsafe.Pointer(&ch.freed)),
 			unsafe.Pointer(freed), unsafe.Pointer(recvd)) {
@@ -109,7 +111,7 @@ func (ch *ChanUint64) Send(value uint64) {
 // Recv receives the next message.
 func (ch *ChanUint64) Recv() uint64 {
 	if ch.recvd != nil {
-		// we have a received item
+		// new message, fist pump
 		v := ch.recvd.valu
 		if ch.recvd.prev == nil {
 			// we're at the end of the recieve queue. put the available
@@ -122,12 +124,12 @@ func (ch *ChanUint64) Recv() uint64 {
 		}
 		return v
 	}
-	// no received items, let's load more from the sender queue.
+	// let's load more messages from the sender queue.
 	var n *nodeUint64
 	for {
 		n = ch.load()
 		if n == nil {
-			// empty sender queue. put the receiver to sleep
+			// sender queue is empty. put the receiver to sleep
 			ch.waitg.Add(1)
 			if ch.cas(n, sleepUint64) {
 				ch.waitg.Wait()
@@ -144,8 +146,8 @@ func (ch *ChanUint64) Recv() uint64 {
 		n.next.prev = n
 		n = n.next
 	}
-	// fill the receive queue
-	ch.recvd = n
+	ch.recvd = n // fill receive queue
+	ch.rtail = n // mark the free tail
 	return ch.Recv()
 }
 
@@ -164,6 +166,7 @@ type ChanPointer struct {
 	waitg sync.WaitGroup // used for sleeping. gotta get our zzz's
 	queue *nodePointer   // sender queue, sender -> receiver
 	recvd *nodePointer   // receive queue, receiver-only
+	rtail *nodePointer   // tail of receive queue, receiver-only
 	freed *nodePointer   // freed queue, receiver -> sender
 	avail *nodePointer   // avail items, sender-only
 }
@@ -207,6 +210,7 @@ func (ch *ChanPointer) free(recvd *nodePointer) {
 		freed := (*nodePointer)(atomic.LoadPointer(
 			(*unsafe.Pointer)(unsafe.Pointer(&ch.freed)),
 		))
+		ch.rtail.next = freed
 		if atomic.CompareAndSwapPointer(
 			(*unsafe.Pointer)(unsafe.Pointer(&ch.freed)),
 			unsafe.Pointer(freed), unsafe.Pointer(recvd)) {
@@ -245,7 +249,7 @@ func (ch *ChanPointer) Send(value unsafe.Pointer) {
 // Recv receives the next message.
 func (ch *ChanPointer) Recv() unsafe.Pointer {
 	if ch.recvd != nil {
-		// we have a received item
+		// new message, fist pump
 		v := ch.recvd.valu
 		if ch.recvd.prev == nil {
 			// we're at the end of the recieve queue. put the available
@@ -258,12 +262,12 @@ func (ch *ChanPointer) Recv() unsafe.Pointer {
 		}
 		return v
 	}
-	// no received items, let's load more from the sender queue.
+	// let's load more messages from the sender queue.
 	var n *nodePointer
 	for {
 		n = ch.load()
 		if n == nil {
-			// empty sender queue. put the receiver to sleep
+			// sender queue is empty. put the receiver to sleep
 			ch.waitg.Add(1)
 			if ch.cas(n, sleepPointer) {
 				ch.waitg.Wait()
@@ -280,7 +284,7 @@ func (ch *ChanPointer) Recv() unsafe.Pointer {
 		n.next.prev = n
 		n = n.next
 	}
-	// fill the receive queue
-	ch.recvd = n
+	ch.recvd = n // fill receive queue
+	ch.rtail = n // mark the free tail
 	return ch.Recv()
 }

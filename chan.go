@@ -30,6 +30,7 @@ type Chan struct {
 	waitg sync.WaitGroup // used for sleeping. gotta get our zzz's
 	queue *nodeT         // sender queue, sender -> receiver
 	recvd *nodeT         // receive queue, receiver-only
+	rtail *nodeT         // tail of receive queue, receiver-only
 	freed *nodeT         // freed queue, receiver -> sender
 	avail *nodeT         // avail items, sender-only
 }
@@ -73,6 +74,7 @@ func (ch *Chan) free(recvd *nodeT) {
 		freed := (*nodeT)(atomic.LoadPointer(
 			(*unsafe.Pointer)(unsafe.Pointer(&ch.freed)),
 		))
+		ch.rtail.next = freed
 		if atomic.CompareAndSwapPointer(
 			(*unsafe.Pointer)(unsafe.Pointer(&ch.freed)),
 			unsafe.Pointer(freed), unsafe.Pointer(recvd)) {
@@ -111,7 +113,7 @@ func (ch *Chan) Send(value interface{}) {
 // Recv receives the next message.
 func (ch *Chan) Recv() interface{} {
 	if ch.recvd != nil {
-		// we have a received item
+		// new message, fist pump
 		v := ch.recvd.valu
 		if ch.recvd.prev == nil {
 			// we're at the end of the recieve queue. put the available
@@ -124,12 +126,12 @@ func (ch *Chan) Recv() interface{} {
 		}
 		return v
 	}
-	// no received items, let's load more from the sender queue.
+	// let's load more messages from the sender queue.
 	var n *nodeT
 	for {
 		n = ch.load()
 		if n == nil {
-			// empty sender queue. put the receiver to sleep
+			// sender queue is empty. put the receiver to sleep
 			ch.waitg.Add(1)
 			if ch.cas(n, sleepN) {
 				ch.waitg.Wait()
@@ -146,7 +148,7 @@ func (ch *Chan) Recv() interface{} {
 		n.next.prev = n
 		n = n.next
 	}
-	// fill the receive queue
-	ch.recvd = n
+	ch.recvd = n // fill receive queue
+	ch.rtail = n // mark the free tail
 	return ch.Recv()
 }
