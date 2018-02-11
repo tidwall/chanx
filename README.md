@@ -9,7 +9,7 @@ Fast single-producer / single-consumer channels for Go.
 A fastlane channel works similar to a standard Go channel with the following exceptions:
 
 - It does not have a close method. A sender must send the receiver a custom close message.
-- It's unbounded and has no buffering. It uses lock-free list under the hood.
+- It's unbounded and has no buffering. There's a lock-free list under the hood.
 - It expects to be communicating over a maximum of two goroutines. One for `Send` and one for `Recv`. 
 
 # Getting Started
@@ -63,18 +63,18 @@ type MyType struct {
 	Hiya string
 }
 
-type ChanMyType struct{ base fastlane.ChanPointer }
+type MyChan struct{ base fastlane.ChanPointer }
 
-func (ch *ChanMyType) Send(value *MyType) {
+func (ch *MyChan) Send(value *MyType) {
 	ch.base.Send(unsafe.Pointer(value))
 }
-func (ch *ChanMyType) Recv() *MyType {
+func (ch *MyChan) Recv() *MyType {
 	return (*MyType)(ch.base.Recv())
 }
 ```
 
 ```go
-var ch ChanMyType
+var ch MyChan
 
 go func() { ch.Send(&MyType{Hiya: "howdy!"}) }()
 
