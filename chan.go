@@ -11,49 +11,53 @@ import (
 	"unsafe"
 )
 
-// sleep is a placeholder that indicates the receiver is sleeping
-var sleep = new(node)
+//go:generate cp gen.go /tmp/chan_gen.go
+//go:generate go run /tmp/chan_gen.go
+//go:generate go fmt
 
-// node is channel message
-type node struct {
+// sleepN is a placeholder that indicates the receiver is sleeping
+var sleepN = &nodeT{}
+
+// nodeT is channel message
+type nodeT struct {
 	valu interface{} // the message value. i hope it's a happy one
-	prev *node       // used by the receiver for tracking backwards
-	next *node       // next item in the queue or freelist
+	prev *nodeT      // used by the receiver for tracking backwards
+	next *nodeT      // next item in the queue or freelist
 }
 
 // Chan represents a single-producer / single-consumer channel.
 type Chan struct {
 	waitg sync.WaitGroup // used for sleeping. gotta get our zzz's
-	queue *node          // sender queue, sender -> receiver
-	recvd *node          // receive queue, receiver-only
-	freed *node          // freed queue, receiver -> sender
-	avail *node          // avail items, sender-only
+	queue *nodeT         // sender queue, sender -> receiver
+	recvd *nodeT         // receive queue, receiver-only
+	freed *nodeT         // freed queue, receiver -> sender
+	avail *nodeT         // avail items, sender-only
 }
 
-func (ch *Chan) load() *node {
-	return (*node)(atomic.LoadPointer(
+func (ch *Chan) load() *nodeT {
+	return (*nodeT)(atomic.LoadPointer(
 		(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
 	))
 }
 
-func (ch *Chan) cas(old, new *node) bool {
+func (ch *Chan) cas(old, new *nodeT) bool {
 	return atomic.CompareAndSwapPointer(
 		(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
 		unsafe.Pointer(old), unsafe.Pointer(new))
 }
 
-func (ch *Chan) new() *node {
+func (ch *Chan) new() *nodeT {
 	if ch.avail != nil {
 		n := ch.avail
 		ch.avail = ch.avail.next
 		return n
 	}
 	for {
-		ch.avail = (*node)(atomic.LoadPointer(
+		ch.avail = (*nodeT)(atomic.LoadPointer(
 			(*unsafe.Pointer)(unsafe.Pointer(&ch.freed)),
 		))
 		if ch.avail == nil {
-			return &node{}
+			return &nodeT{}
 		}
 		if atomic.CompareAndSwapPointer(
 			(*unsafe.Pointer)(unsafe.Pointer(&ch.freed)),
@@ -64,9 +68,9 @@ func (ch *Chan) new() *node {
 	}
 }
 
-func (ch *Chan) free(recvd *node) {
+func (ch *Chan) free(recvd *nodeT) {
 	for {
-		freed := (*node)(atomic.LoadPointer(
+		freed := (*nodeT)(atomic.LoadPointer(
 			(*unsafe.Pointer)(unsafe.Pointer(&ch.freed)),
 		))
 		if atomic.CompareAndSwapPointer(
@@ -85,7 +89,7 @@ func (ch *Chan) Send(value interface{}) {
 	var wake bool
 	for {
 		n.next = ch.load()
-		if n.next == sleep {
+		if n.next == sleepN {
 			// there's a sleep placeholder in the sender queue.
 			// clear it and prepare to wake the receiver.
 			if ch.cas(n.next, n.next.next) {
@@ -109,8 +113,6 @@ func (ch *Chan) Recv() interface{} {
 	if ch.recvd != nil {
 		// we have a received item
 		v := ch.recvd.valu
-		// set the value to zero allowing it to be freed by the GC.
-		(*(*[2]uintptr)(unsafe.Pointer(&ch.recvd.valu)))[1] = 0
 		if ch.recvd.prev == nil {
 			// we're at the end of the recieve queue. put the available
 			// nodes into the freelist.
@@ -123,13 +125,13 @@ func (ch *Chan) Recv() interface{} {
 		return v
 	}
 	// no received items, let's load more from the sender queue.
-	var n *node
+	var n *nodeT
 	for {
 		n = ch.load()
 		if n == nil {
 			// empty sender queue. put the receiver to sleep
 			ch.waitg.Add(1)
-			if ch.cas(n, sleep) {
+			if ch.cas(n, sleepN) {
 				ch.waitg.Wait()
 			} else {
 				ch.waitg.Done()

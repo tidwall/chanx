@@ -49,6 +49,31 @@ $ go run chan.go
 ping
 ```
 
+
+## Channel types
+
+There's currently three types of channels, `Chan` for `interface{}`, `ChanUint64` for `uint64`, and `ChanPointer` for `unsafe.Pointer`.
+
+The `ChanUint64` and `ChanPointer` often perform better than the generic `Chan` and should be used when possible.
+
+Here's a simple wrapper for creating a channel for sending a custom types as a pointer:
+
+```go
+type MyType struct {
+	Hiya int
+}
+
+type ChanMyType struct{ base fastlane.ChanPointer }
+
+func (ch *ChanMyType) Send(value *MyType) {
+	ch.base.Send(unsafe.Pointer(value))
+}
+func (ch *ChanMyType) Recv() *MyType {
+	return (*MyType)(ch.base.Recv())
+}
+```
+
+
 ## Performance
 
 The benchmark tests the speed of sending integers between two goroutines.
@@ -60,29 +85,37 @@ $ go test -run none -bench .
 MacBook Pro 15" 2.8 GHz Intel Core i7 (darwin/amd64)
 
 ```
-BenchmarkFastlaneChan-8   	20000000	        72.7 ns/op
-BenchmarkGoChan-8         	 5000000	       241 ns/op
+BenchmarkFastlaneChan-8       	30000000	        40.4 ns/op
+BenchmarkGoChan100-8          	20000000	        68.9 ns/op
+BenchmarkGoChan10-8           	20000000	        74.4 ns/op
+BenchmarkGoChanUnbuffered-8   	10000000	       197 ns/op
 ```
 
 Mac mini i7-3615QM CPU @ 2.30GHz (linux/amd64)
 
 ```
-BenchmarkFastlaneChan-8   	10000000	       105 ns/op
-BenchmarkGoChan-8         	 3000000	       602 ns/op
+BenchmarkFastlaneChan-8       	20000000	        67.3 ns/op
+BenchmarkGoChan100-8          	10000000	       181 ns/op
+BenchmarkGoChan10-8           	 5000000	       223 ns/op
+BenchmarkGoChanUnbuffered-8   	 5000000	       595 ns/op
 ```
 
 Raspberry Pi 3 (linux/arm64)
 
 ```
-BenchmarkFastlaneChan-4   	 5000000	       393 ns/op
-BenchmarkGoChan-4         	 1000000	      1337 ns/op
+BenchmarkFastlaneChan-4       	10000000	       213 ns/op
+BenchmarkGoChan100-4          	 3000000	       406 ns/op
+BenchmarkGoChan10-4           	 3000000	       578 ns/op
+BenchmarkGoChanUnbuffered-4   	 1000000	      1405 ns/op
 ```
 
 Raspberry Pi 3 (linux/arm)
 
 ```
-BenchmarkFastlaneChan-4   	 3000000	       535 ns/op
-BenchmarkGoChan-4         	 1000000	      2195 ns/op
+BenchmarkFastlaneChan-4       	 5000000	       334 ns/op
+BenchmarkGoChan100-4          	 2000000	       669 ns/op
+BenchmarkGoChan10-4           	 2000000	       936 ns/op
+BenchmarkGoChanUnbuffered-4   	 1000000	      2370 ns/op
 ```
 
 ## Contact
