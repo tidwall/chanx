@@ -10,7 +10,9 @@ A fastlane channel works similar to a standard Go channel with the following exc
 
 - It does not have a close method. A sender must send the receiver a custom close message.
 - It's unbounded and has no buffering. There's a lock-free list under the hood.
-- It expects to be communicating over a maximum of two goroutines. One for `Send` and one for `Recv`. 
+- It expects to be communicating over a maximum of two goroutines. One for `Send` and one for `Recv`.
+
+Just like standard Go channels, a fastlane channel guarantees order preservation and has no data loss.
 
 # Getting Started
 
