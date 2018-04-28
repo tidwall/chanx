@@ -42,25 +42,25 @@ func TestFastlaneChan(t *testing.T) {
 	//P := 1
 	for P := 1; P < 1000; P *= 10 {
 		start = time.Now()
-		benchmarkFastlaneChan(N, P, true)
+		benchmarkFastlaneChan(N, P, P == 1)
 		printResults("fastlane-channel", N, P, time.Since(start))
 
 		start = time.Now()
-		benchmarkGoChan(N, 100, P, true)
+		benchmarkGoChan(N, 100, P, P == 1)
 		printResults("go-channel(100)", N, P, time.Since(start))
 
 		start = time.Now()
-		benchmarkGoChan(N, 10, P, true)
+		benchmarkGoChan(N, 10, P, P == 1)
 		printResults("go-channel(10)", N, P, time.Since(start))
 
 		start = time.Now()
-		benchmarkGoChan(N, 0, P, true)
+		benchmarkGoChan(N, 0, P, P == 1)
 		printResults("go-channel(0)", N, P, time.Since(start))
 	}
 
 }
 
-func benchmarkFastlaneChan(N int, producers int, validate bool) {
+func benchmarkFastlaneChan(N int, P int, validate bool) {
 	var ch ChanUint64
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -75,7 +75,7 @@ func benchmarkFastlaneChan(N int, producers int, validate bool) {
 		}
 		wg.Done()
 	}()
-	lotsa.Ops(N, producers, func(i, _ int) {
+	lotsa.Ops(N, P, func(i, _ int) {
 		ch.Send(uint64(i))
 	})
 	wg.Wait()
