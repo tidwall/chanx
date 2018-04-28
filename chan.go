@@ -25,7 +25,7 @@ type nodeT struct {
 
 // Chan represents a single-producer / single-consumer channel.
 type Chan struct {
-	waitg sync.WaitGroup // used for sleeping. gotta get our zzz's
+	waitg sync.WaitGroup // used for sleeping. gotta get our zzzs
 	queue *nodeT         // items in the sender queue
 	recvd *nodeT         // receive queue, receiver-only
 }
@@ -65,46 +65,46 @@ func (ch *Chan) Send(value interface{}) {
 
 // Recv receives the next message.
 func (ch *Chan) Recv() interface{} {
-	if ch.recvd != nil {
-		// new message, fist pump
-		value := ch.recvd.value
-		ch.recvd = ch.recvd.next
-		return value
-	}
-	// let's load more messages from the sender queue.
-	var n *nodeT
 	for {
-		n = (*nodeT)(atomic.LoadPointer(
-			(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
-		))
-		if n == nil {
-			// sender queue is empty. put the receiver to sleep
-			ch.waitg.Add(1)
-			if atomic.CompareAndSwapPointer(
-				(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
-				unsafe.Pointer(n), unsafe.Pointer(sleepN)) {
-				ch.waitg.Wait()
-			} else {
-				ch.waitg.Done()
-			}
-		} else if atomic.CompareAndSwapPointer(
-			(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
-			unsafe.Pointer(n), nil) {
-			break
+		if ch.recvd != nil {
+			// new message, fist pump
+			value := ch.recvd.value
+			ch.recvd = ch.recvd.next
+			return value
 		}
-		runtime.Gosched()
+		// let's load more messages from the sender queue.
+		var n *nodeT
+		for {
+			n = (*nodeT)(atomic.LoadPointer(
+				(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
+			))
+			if n == nil {
+				// sender queue is empty. put the receiver to sleep
+				ch.waitg.Add(1)
+				if atomic.CompareAndSwapPointer(
+					(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
+					unsafe.Pointer(n), unsafe.Pointer(sleepN)) {
+					ch.waitg.Wait()
+				} else {
+					ch.waitg.Done()
+				}
+			} else if atomic.CompareAndSwapPointer(
+				(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
+				unsafe.Pointer(n), nil) {
+				break
+			}
+			runtime.Gosched()
+		}
+		// reverse queue
+		var prev, next *nodeT
+		var current = n
+		for current != nil {
+			next = current.next
+			current.next = prev
+			prev = current
+			current = next
+		}
+		// set recvd list and return value
+		ch.recvd = prev
 	}
-	// reverse queue
-	var prev, next *nodeT
-	var current = n
-	for current != nil {
-		next = current.next
-		current.next = prev
-		prev = current
-		current = next
-	}
-	// set recvd list and return value
-	value := prev.value
-	ch.recvd = prev.next
-	return value
 }
