@@ -29,23 +29,6 @@ func TestOrder(t *testing.T) {
 	type msgT struct{ i, thread int }
 	var ch Chan
 
-	// test basic ordering and Len()
-	for i := 0; i < 5; i++ {
-		ch.Send(&msgT{i, -1})
-		if ch.Len() != i+1 {
-			t.Fatalf("expected %v, got %v", i+1, ch.Len())
-		}
-	}
-	for i := 0; i < 5; i++ {
-		msg := ch.Recv().(*msgT)
-		if msg.i != i {
-			t.Fatalf("expected %v, got %v", i, msg.i)
-		}
-		if ch.Len() != 5-(i+1) {
-			t.Fatalf("expected %v, got %v", i-(i+1), ch.Len())
-		}
-	}
-
 	N := 1000000
 	T := 100
 	go func() {
@@ -86,9 +69,6 @@ func TestOrder(t *testing.T) {
 			}
 			all[h] = true
 		}
-	}
-	if ch.Len() != 0 {
-		t.Fatalf("expected %v, got %v", 0, ch.Len())
 	}
 }
 

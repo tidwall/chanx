@@ -26,6 +26,7 @@ func makeType(sig, typ string) (head, body string) {
 	s = strings.Replace(s, "sleepN", "sleep"+sig, -1)
 	s = strings.Replace(s, "emptyN", "empty"+sig, -1)
 	s = strings.Replace(s, "nodeT", "node"+sig, -1)
+	s = strings.Replace(s, "optz", "optz"+sig, -1)
 	s = strings.Replace(s, "interface{}", typ, -1)
 	var tgen bool
 	for _, line := range strings.Split(s, "\n") {

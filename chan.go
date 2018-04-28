@@ -28,31 +28,11 @@ type Chan struct {
 	waitg sync.WaitGroup // used for sleeping. gotta get our zzzs
 	queue *nodeT         // items in the sender queue
 	recvd *nodeT         // receive queue, receiver-only
-	freed *nodeT         // freelist for minimizing allocation
-	first *nodeT         // first item in recvd
-	last  *nodeT         // last item in recvd
-	count uintptr        // track the number of items in the queue
 }
 
 // Send sends a message of the receiver.
 func (ch *Chan) Send(value interface{}) {
-	var n *nodeT
-	for {
-		n = (*nodeT)(atomic.LoadPointer(
-			(*unsafe.Pointer)(unsafe.Pointer(&ch.freed)),
-		))
-		if n == nil {
-			n = new(nodeT)
-			break
-		}
-		if atomic.CompareAndSwapPointer(
-			(*unsafe.Pointer)(unsafe.Pointer(&ch.freed)),
-			unsafe.Pointer(n), unsafe.Pointer(n.next)) {
-			break
-		}
-		runtime.Gosched()
-	}
-	n.value = value
+	n := &nodeT{value: value}
 	var wake bool
 	for {
 		n.next = (*nodeT)(atomic.LoadPointer(
@@ -64,6 +44,7 @@ func (ch *Chan) Send(value interface{}) {
 			if atomic.CompareAndSwapPointer(
 				(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
 				unsafe.Pointer(n.next), unsafe.Pointer(n.next.next)) {
+				// wake up the receiver
 				wake = true
 			}
 		} else {
@@ -76,10 +57,8 @@ func (ch *Chan) Send(value interface{}) {
 		runtime.Gosched()
 	}
 	if wake {
-		// wake up the receiver
 		ch.waitg.Done()
 	}
-	atomic.AddUintptr(&ch.count, 1)
 }
 
 // Recv receives the next message.
@@ -89,22 +68,6 @@ func (ch *Chan) Recv() interface{} {
 			// new message, fist pump
 			value := ch.recvd.value
 			ch.recvd = ch.recvd.next
-			if ch.recvd == nil {
-				// add to received items to the free list
-				for {
-					freed := (*nodeT)(atomic.LoadPointer(
-						(*unsafe.Pointer)(unsafe.Pointer(&ch.freed)),
-					))
-					ch.last.next = freed
-					if atomic.CompareAndSwapPointer(
-						(*unsafe.Pointer)(unsafe.Pointer(&ch.freed)),
-						unsafe.Pointer(freed), unsafe.Pointer(ch.first)) {
-						break
-					}
-					runtime.Gosched()
-				}
-			}
-			atomic.AddUintptr(&ch.count, ^uintptr(0))
 			return value
 		}
 		// let's load more messages from the sender queue.
@@ -137,17 +100,9 @@ func (ch *Chan) Recv() interface{} {
 				}
 				// fill the recvd list
 				ch.recvd = prev
-				// set the first and last items for freeing later
-				ch.first = prev
-				ch.last = queue
 				break
 			}
 			runtime.Gosched()
 		}
 	}
-}
-
-// Len returns the number of message in the sender queue.
-func (ch *Chan) Len() int {
-	return int(atomic.LoadUintptr(&ch.count))
 }
