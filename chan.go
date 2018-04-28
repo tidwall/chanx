@@ -28,11 +28,30 @@ type Chan struct {
 	waitg sync.WaitGroup // used for sleeping. gotta get our zzzs
 	queue *nodeT         // items in the sender queue
 	recvd *nodeT         // receive queue, receiver-only
+	freed *nodeT         // freelist for minimizing allocation
+	first *nodeT         // first item in recvd
+	last  *nodeT         // last item in recvd
+	count uintptr        // track the number of items in the queue
 }
 
 // Send sends a message of the receiver.
 func (ch *Chan) Send(value interface{}) {
-	n := new(nodeT)
+	var n *nodeT
+	for {
+		n = (*nodeT)(atomic.LoadPointer(
+			(*unsafe.Pointer)(unsafe.Pointer(&ch.freed)),
+		))
+		if n == nil {
+			n = new(nodeT)
+			break
+		}
+		if atomic.CompareAndSwapPointer(
+			(*unsafe.Pointer)(unsafe.Pointer(&ch.freed)),
+			unsafe.Pointer(n), unsafe.Pointer(n.next)) {
+			break
+		}
+		runtime.Gosched()
+	}
 	n.value = value
 	var wake bool
 	for {
@@ -60,7 +79,7 @@ func (ch *Chan) Send(value interface{}) {
 		// wake up the receiver
 		ch.waitg.Done()
 	}
-
+	atomic.AddUintptr(&ch.count, 1)
 }
 
 // Recv receives the next message.
@@ -70,41 +89,65 @@ func (ch *Chan) Recv() interface{} {
 			// new message, fist pump
 			value := ch.recvd.value
 			ch.recvd = ch.recvd.next
+			if ch.recvd == nil {
+				// add to received items to the free list
+				for {
+					freed := (*nodeT)(atomic.LoadPointer(
+						(*unsafe.Pointer)(unsafe.Pointer(&ch.freed)),
+					))
+					ch.last.next = freed
+					if atomic.CompareAndSwapPointer(
+						(*unsafe.Pointer)(unsafe.Pointer(&ch.freed)),
+						unsafe.Pointer(freed), unsafe.Pointer(ch.first)) {
+						break
+					}
+					runtime.Gosched()
+				}
+			}
+			atomic.AddUintptr(&ch.count, ^uintptr(0))
 			return value
 		}
 		// let's load more messages from the sender queue.
-		var n *nodeT
 		for {
-			n = (*nodeT)(atomic.LoadPointer(
+			queue := (*nodeT)(atomic.LoadPointer(
 				(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
 			))
-			if n == nil {
+			if queue == nil {
 				// sender queue is empty. put the receiver to sleep
 				ch.waitg.Add(1)
 				if atomic.CompareAndSwapPointer(
 					(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
-					unsafe.Pointer(n), unsafe.Pointer(sleepN)) {
+					unsafe.Pointer(queue), unsafe.Pointer(sleepN)) {
 					ch.waitg.Wait()
 				} else {
 					ch.waitg.Done()
 				}
 			} else if atomic.CompareAndSwapPointer(
 				(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
-				unsafe.Pointer(n), nil) {
+				unsafe.Pointer(queue), nil) {
+				// we have an isolated queue of messages
+				// reverse the queue
+				var prev, next *nodeT
+				var current = queue
+				for current != nil {
+					next = current.next
+					current.next = prev
+					prev = current
+					current = next
+				}
+				// fill the recvd list
+				ch.recvd = prev
+				// set the first and last items for freeing later
+				ch.first = prev
+				ch.last = queue
 				break
 			}
 			runtime.Gosched()
 		}
-		// reverse queue
-		var prev, next *nodeT
-		var current = n
-		for current != nil {
-			next = current.next
-			current.next = prev
-			prev = current
-			current = next
-		}
-		// set recvd list and return value
-		ch.recvd = prev
 	}
+}
+
+// Len returns the number of message in the sender queue.
+func (ch *Chan) Len() int {
+	return int(atomic.LoadUintptr(&ch.count))
 }

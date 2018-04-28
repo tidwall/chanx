@@ -27,9 +27,27 @@ func (ch *ChanMyType) Recv() *MyType {
 func TestOrder(t *testing.T) {
 	// testing that order is preserved
 	type msgT struct{ i, thread int }
+	var ch Chan
+
+	// test basic ordering and Len()
+	for i := 0; i < 5; i++ {
+		ch.Send(&msgT{i, -1})
+		if ch.Len() != i+1 {
+			t.Fatalf("expected %v, got %v", i+1, ch.Len())
+		}
+	}
+	for i := 0; i < 5; i++ {
+		msg := ch.Recv().(*msgT)
+		if msg.i != i {
+			t.Fatalf("expected %v, got %v", i, msg.i)
+		}
+		if ch.Len() != 5-(i+1) {
+			t.Fatalf("expected %v, got %v", i-(i+1), ch.Len())
+		}
+	}
+
 	N := 1000000
 	T := 100
-	var ch Chan
 	go func() {
 		lotsa.Ops(N, 100, func(i, thread int) {
 			ch.Send(&msgT{i, thread})
@@ -68,6 +86,9 @@ func TestOrder(t *testing.T) {
 			}
 			all[h] = true
 		}
+	}
+	if ch.Len() != 0 {
+		t.Fatalf("expected %v, got %v", 0, ch.Len())
 	}
 }
 
@@ -169,7 +190,7 @@ func benchmarkGoChan(N, buffered int, producers int, validate bool) {
 }
 
 func Benchmark100ProducerFastlaneChan(b *testing.B) {
-	//b.ReportAllocs()
+	b.ReportAllocs()
 	benchmarkFastlaneChan(b.N, 100, false)
 }
 
