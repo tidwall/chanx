@@ -4,13 +4,13 @@
 [![GoDoc](https://img.shields.io/badge/api-reference-blue.svg?style=flat-square)](https://godoc.org/github.com/tidwall/fastlane)
 
 
-Fast single-producer / single-consumer channels for Go.
+Fast multi-producer / single-consumer channels for Go.
 
 A fastlane channel works similar to a standard Go channel with the following exceptions:
 
 - It does not have a close method. A sender must send the receiver a custom close message.
 - It's unbounded and has no buffering. There's a lock-free list under the hood.
-- It expects to be communicating over a maximum of two goroutines. One for `Send` and one for `Recv`.
+- There can be multiple goroutines that call `Send`, but only one for `Recv`.
 
 Just like standard Go channels, a fastlane channel guarantees order preservation and has no data loss.
 
