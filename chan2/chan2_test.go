@@ -87,7 +87,6 @@ func TestFastlane(t *testing.T) {
 		all[n-1] = v
 		if n == N {
 			dur := time.Since(start)
-			// dur := time.Since(start)
 			sort.Ints(all)
 			for i := 0; i < N; i++ {
 				if all[i] != i {
