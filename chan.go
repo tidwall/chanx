@@ -89,17 +89,13 @@ func (ch *Chan) Recv() interface{} {
 				(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
 				unsafe.Pointer(queue), nil) {
 				// we have an isolated queue of messages
-				// reverse the queue
-				var prev, next *nodeT
-				var current = queue
-				for current != nil {
-					next = current.next
-					current.next = prev
-					prev = current
-					current = next
+				// reverse the queue and fill the recvd list
+				for queue != nil {
+					next := queue.next
+					queue.next = ch.recvd
+					ch.recvd = queue
+					queue = next
 				}
-				// fill the recvd list
-				ch.recvd = prev
 				break
 			}
 			runtime.Gosched()
