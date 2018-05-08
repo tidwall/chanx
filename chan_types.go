@@ -13,8 +13,6 @@ import (
 	"unsafe"
 )
 
-var sleepUint64 = new(nodeUint64) // placeholder that indicates the receiver is sleeping
-
 // nodeUint64 is channel message
 type nodeUint64 struct {
 	value uint64      // the message value. i hope it's a happy one
@@ -26,6 +24,7 @@ type ChanUint64 struct {
 	waitg sync.WaitGroup // used for sleeping. gotta get our zzzs
 	queue *nodeUint64    // items in the sender queue
 	recvd *nodeUint64    // receive queue, receiver-only
+	sleep nodeUint64     // resuable indicates the receiver is sleeping
 }
 
 // Send sends a message of the receiver.
@@ -36,7 +35,7 @@ func (ch *ChanUint64) Send(value uint64) {
 		n.next = (*nodeUint64)(atomic.LoadPointer(
 			(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
 		))
-		if n.next == sleepUint64 {
+		if n.next == &ch.sleep {
 			// there's a sleep placeholder in the sender queue.
 			// clear it and prepare to wake the receiver.
 			if atomic.CompareAndSwapPointer(
@@ -78,7 +77,7 @@ func (ch *ChanUint64) Recv() uint64 {
 				ch.waitg.Add(1)
 				if atomic.CompareAndSwapPointer(
 					(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
-					unsafe.Pointer(queue), unsafe.Pointer(sleepUint64)) {
+					unsafe.Pointer(queue), unsafe.Pointer(&ch.sleep)) {
 					ch.waitg.Wait()
 				} else {
 					ch.waitg.Done()
@@ -87,25 +86,19 @@ func (ch *ChanUint64) Recv() uint64 {
 				(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
 				unsafe.Pointer(queue), nil) {
 				// we have an isolated queue of messages
-				// reverse the queue
-				var prev, next *nodeUint64
-				var current = queue
-				for current != nil {
-					next = current.next
-					current.next = prev
-					prev = current
-					current = next
+				// reverse the queue and fill the recvd list
+				for queue != nil {
+					next := queue.next
+					queue.next = ch.recvd
+					ch.recvd = queue
+					queue = next
 				}
-				// fill the recvd list
-				ch.recvd = prev
 				break
 			}
 			runtime.Gosched()
 		}
 	}
 }
-
-var sleepPointer = new(nodePointer) // placeholder that indicates the receiver is sleeping
 
 // nodePointer is channel message
 type nodePointer struct {
@@ -118,6 +111,7 @@ type ChanPointer struct {
 	waitg sync.WaitGroup // used for sleeping. gotta get our zzzs
 	queue *nodePointer   // items in the sender queue
 	recvd *nodePointer   // receive queue, receiver-only
+	sleep nodePointer    // resuable indicates the receiver is sleeping
 }
 
 // Send sends a message of the receiver.
@@ -128,7 +122,7 @@ func (ch *ChanPointer) Send(value unsafe.Pointer) {
 		n.next = (*nodePointer)(atomic.LoadPointer(
 			(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
 		))
-		if n.next == sleepPointer {
+		if n.next == &ch.sleep {
 			// there's a sleep placeholder in the sender queue.
 			// clear it and prepare to wake the receiver.
 			if atomic.CompareAndSwapPointer(
@@ -170,7 +164,7 @@ func (ch *ChanPointer) Recv() unsafe.Pointer {
 				ch.waitg.Add(1)
 				if atomic.CompareAndSwapPointer(
 					(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
-					unsafe.Pointer(queue), unsafe.Pointer(sleepPointer)) {
+					unsafe.Pointer(queue), unsafe.Pointer(&ch.sleep)) {
 					ch.waitg.Wait()
 				} else {
 					ch.waitg.Done()
@@ -179,17 +173,13 @@ func (ch *ChanPointer) Recv() unsafe.Pointer {
 				(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
 				unsafe.Pointer(queue), nil) {
 				// we have an isolated queue of messages
-				// reverse the queue
-				var prev, next *nodePointer
-				var current = queue
-				for current != nil {
-					next = current.next
-					current.next = prev
-					prev = current
-					current = next
+				// reverse the queue and fill the recvd list
+				for queue != nil {
+					next := queue.next
+					queue.next = ch.recvd
+					ch.recvd = queue
+					queue = next
 				}
-				// fill the recvd list
-				ch.recvd = prev
 				break
 			}
 			runtime.Gosched()

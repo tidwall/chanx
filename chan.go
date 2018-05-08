@@ -15,8 +15,6 @@ import (
 //go:generate go run /tmp/chan_gen.go
 //go:generate go fmt
 
-var sleepN = new(nodeT) // placeholder that indicates the receiver is sleeping
-
 // nodeT is channel message
 type nodeT struct {
 	value interface{} // the message value. i hope it's a happy one
@@ -28,6 +26,7 @@ type Chan struct {
 	waitg sync.WaitGroup // used for sleeping. gotta get our zzzs
 	queue *nodeT         // items in the sender queue
 	recvd *nodeT         // receive queue, receiver-only
+	sleep nodeT          // resuable indicates the receiver is sleeping
 }
 
 // Send sends a message of the receiver.
@@ -38,7 +37,7 @@ func (ch *Chan) Send(value interface{}) {
 		n.next = (*nodeT)(atomic.LoadPointer(
 			(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
 		))
-		if n.next == sleepN {
+		if n.next == &ch.sleep {
 			// there's a sleep placeholder in the sender queue.
 			// clear it and prepare to wake the receiver.
 			if atomic.CompareAndSwapPointer(
@@ -80,7 +79,7 @@ func (ch *Chan) Recv() interface{} {
 				ch.waitg.Add(1)
 				if atomic.CompareAndSwapPointer(
 					(*unsafe.Pointer)(unsafe.Pointer(&ch.queue)),
-					unsafe.Pointer(queue), unsafe.Pointer(sleepN)) {
+					unsafe.Pointer(queue), unsafe.Pointer(&ch.sleep)) {
 					ch.waitg.Wait()
 				} else {
 					ch.waitg.Done()
