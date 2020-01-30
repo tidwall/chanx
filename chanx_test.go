@@ -24,7 +24,7 @@ func TestOrder(t *testing.T) {
 	// testing that order is preserved
 	type msgT struct{ i, thread int }
 	ch := Make(0)
-	N := 1_000_000
+	N := 1000000
 	T := 100
 	go func() {
 		lotsa.Ops(N, 100, func(i, thread int) {
