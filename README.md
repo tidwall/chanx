@@ -7,7 +7,7 @@ A simple interface wrapper around a Go channel.
 
 ```go
 // Make new channel. Provide a length to make a buffered channel.
-func Make(length) C
+func Make(length int) C
 
 type C interface {
 	// Send a messge to the channel. Returns false if the channel is closed.
@@ -16,6 +16,9 @@ type C interface {
 	Recv() (v interface{}, ok bool)
 	// Close the channel. Returns false if the channel is already closed.
 	Close() (ok bool)
+	// Wait for the channel to close. Returns immediately if the channel is
+	// already closed
+	Wait()
 }
 ```
 
