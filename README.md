@@ -1,6 +1,5 @@
 # chanx
 
-[![Build Status](https://img.shields.io/travis/tidwall/chanx.svg?style=flat-square)](https://travis-ci.org/tidwall/chanx)
 [![GoDoc](https://img.shields.io/badge/api-reference-blue.svg?style=flat-square)](https://godoc.org/github.com/tidwall/chanx)
 
 A simple interface wrapper around a Go channel.
